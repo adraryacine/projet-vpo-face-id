@@ -1,0 +1,30 @@
+# ==============================================================================
+# FICHIER : requirements.txt
+# Dépendances Python du projet d'identification faciale.
+#
+# Installation :
+#   pip install -r requirements.txt
+#
+# Versions testées avec Python 3.9, 3.10, 3.11
+# ==============================================================================
+
+# OpenCV : webcam, affichage, Haar cascades, transformations géométriques
+opencv-python>=4.7.0
+
+# NumPy : calculs matriciels (vecteurs, distances, rotations)
+numpy>=1.23.0
+
+# SciPy : fonctions mathématiques avancées (utilisé en interne par scikit-image)
+scipy>=1.9.0
+
+# scikit-image : algorithme Snake (active_contour) + filtres gaussiens
+scikit-image>=0.20.0
+
+# Pandas : manipulation de DataFrames (optionnel, pour analyse CSV avancée)
+pandas>=1.5.0
+
+# Matplotlib : visualisation, matrice de confusion, courbes de performance
+matplotlib>=3.6.0
+
+# Tkinter est inclus dans Python standard (pas besoin de pip install)
+# Si absent (Linux) : sudo apt-get install python3-tk
