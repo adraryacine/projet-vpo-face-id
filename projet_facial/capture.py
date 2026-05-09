@@ -125,14 +125,22 @@ def charger_dataset(chemin=DATASET_PATH):
           f"{lignes_invalides} lignes ignorées.")
 
     if vecteurs:
-        normes = np.linalg.norm(np.vstack(vecteurs), axis=1)
-        indices_valides = [i for i, norme in enumerate(normes) if norme <= 2.0]
-        nb_anciens = len(vecteurs) - len(indices_valides)
-        if nb_anciens > 0:
-            print(f"[CSV] ATTENTION: {nb_anciens} anciens vecteurs ignores. "
+        matrice = np.vstack(vecteurs)
+        normes  = np.linalg.norm(matrice, axis=1)
+        # Garder seulement les vecteurs normalisés valides (norme ≈ 1.0).
+        # - norme < 0.5 : vecteur nul ou quasi-nul (visage mal détecté, image noire)
+        # - norme > 1.5 : ancien format pré-normalisation (avant refactoring DCT)
+        # - NaN/Inf     : image corrompue (peut fausser toutes les distances)
+        nan_ok   = np.all(np.isfinite(matrice), axis=1)
+        norme_ok = (normes >= 0.5) & (normes <= 1.5)
+        indices_valides = [i for i, (ok1, ok2) in enumerate(zip(nan_ok, norme_ok))
+                           if ok1 and ok2]
+        nb_rejetes = len(vecteurs) - len(indices_valides)
+        if nb_rejetes > 0:
+            print(f"[CSV] ATTENTION: {nb_rejetes} vecteurs invalides ou anciens ignores. "
                   "Refaites l'enregistrement avec E.")
             personnes = [personnes[i] for i in indices_valides]
-            vecteurs = [vecteurs[i] for i in indices_valides]
+            vecteurs  = [vecteurs[i]  for i in indices_valides]
 
     return personnes, vecteurs
 

@@ -153,17 +153,29 @@ def identifier_knn(vecteur_inconnu, personnes, vecteurs, seuil=0.5, k=5):
     if len(personnes) == 0:
         raise ValueError("Dataset vide.")
 
-    # k ne peut pas dépasser le nombre d'enregistrements
-    k = min(k, len(personnes))
+    if not np.all(np.isfinite(vecteur_inconnu)):
+        raise ValueError("Vecteur d'entrée invalide (contient NaN ou Inf).")
 
-    # Calculer toutes les distances
-    matrice   = np.array(vecteurs)
+    k = min(k, len(vecteurs))
+
+    matrice = np.array(vecteurs)
+
+    # Filtrer les vecteurs corrompus (NaN/Inf) du dataset avant le calcul
+    masque_valides = np.all(np.isfinite(matrice), axis=1)
+    if not np.all(masque_valides):
+        nb_invalides = int(np.sum(~masque_valides))
+        print(f"[KNN] {nb_invalides} vecteurs invalides ignores dans le dataset.")
+        indices_ok = np.where(masque_valides)[0]
+        matrice   = matrice[indices_ok]
+        personnes = [personnes[i] for i in indices_ok]
+        k = min(k, len(personnes))
+        if len(personnes) == 0:
+            raise ValueError("Aucun vecteur valide dans le dataset.")
+
     distances = np.linalg.norm(matrice - vecteur_inconnu, axis=1)
 
-    # Indices des k plus proches voisins
     indices_topk = np.argsort(distances)[:k]
 
-    # Filtrer : ne garder que les voisins sous le seuil
     voisins_valides = [(personnes[i], distances[i])
                        for i in indices_topk
                        if distances[i] <= seuil]
@@ -174,14 +186,39 @@ def identifier_knn(vecteur_inconnu, personnes, vecteurs, seuil=0.5, k=5):
     if not voisins_valides:
         return "Inconnu", float(distances[indices_topk[0]]), 0.0, top3
 
-    # Vote majoritaire : quel nom apparaît le plus parmi les voisins valides ?
+    # Vote majoritaire avec tie-breaking par distance minimale (évite l'aléatoire)
     votes = Counter(nom for nom, _ in voisins_valides)
-    nom_gagnant = votes.most_common(1)[0][0]
+    max_votes = votes.most_common(1)[0][1]
+    candidats_ex_aequo = [nom for nom, nb in votes.items() if nb == max_votes]
 
-    # Distance minimale globale (pour le score de confiance)
-    dist_min  = float(distances[indices_topk[0]])
+    if len(candidats_ex_aequo) > 1:
+        dist_min_par_nom = {}
+        for nom, dist in voisins_valides:
+            if nom in candidats_ex_aequo:
+                if nom not in dist_min_par_nom or dist < dist_min_par_nom[nom]:
+                    dist_min_par_nom[nom] = dist
+        nom_gagnant = min(candidats_ex_aequo, key=lambda n: dist_min_par_nom[n])
+    else:
+        nom_gagnant = candidats_ex_aequo[0]
+
+    dist_min = float(distances[indices_topk[0]])
+
+    # Test de marge : rejeter si une autre personne est trop proche du gagnant.
+    # Avec beaucoup de personnes, les clusters se rapprochent — une marge de 15%
+    # évite les identifications ambiguës (exemple : Alice=0.28, Bob=0.30 → Inconnu).
+    dist_min_par_personne = {}
+    for i, nom in enumerate(personnes):
+        d = float(distances[i])
+        if nom not in dist_min_par_personne or d < dist_min_par_personne[nom]:
+            dist_min_par_personne[nom] = d
+
+    dist_gagnant = dist_min_par_personne.get(nom_gagnant, dist_min)
+    autres_dists = [d for n, d in dist_min_par_personne.items() if n != nom_gagnant]
+
+    if autres_dists and min(autres_dists) < dist_gagnant * 1.15:
+        return "Inconnu", dist_min, 0.0, top3
+
     confiance = max(0.0, (1.0 - dist_min / seuil)) * 100.0
-
     return nom_gagnant, dist_min, confiance, top3
 
 

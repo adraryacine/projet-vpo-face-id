@@ -51,27 +51,19 @@ class SimulateurPorte:
     """
 
     def __init__(self):
-        """Initialise la fenêtre et tous les widgets Tkinter."""
-        self.root = tk.Tk()
-        self.root.title("Porte Sécurisée — Système d'Identification Faciale")
-        self.root.configure(bg=COULEUR_FOND)
-        self.root.resizable(False, False)
+        """Stocke l'état initial. La fenêtre Tkinter est créée dans lancer()
+        pour respecter la règle Windows : tk.Tk() et mainloop() doivent être
+        dans le même thread (sinon RuntimeError: Calling Tcl from different apartment)."""
+        self.root = None
 
         # --- Dimensions de la fenêtre ---
         self.largeur_fenetre = 480
         self.hauteur_fenetre = 560
-        self.root.geometry(f"{self.largeur_fenetre}x{self.hauteur_fenetre}")
 
         # --- État interne ---
-        self._etat           = 'attente'   # 'attente' | 'ouvert' | 'ferme'
-        self._angle_porte    = 0           # Angle d'ouverture (0=fermé, 90=ouvert)
+        self._etat             = 'attente'
+        self._angle_porte      = 0
         self._animation_active = False
-
-        # --- Construction de l'interface ---
-        self._creer_interface()
-
-        # --- État initial ---
-        self.en_attente()
 
     # ==========================================================================
     # CONSTRUCTION DE L'INTERFACE
@@ -286,10 +278,13 @@ class SimulateurPorte:
         Déclenche l'animation d'ouverture et met à jour les labels.
         Thread-safe grâce à after().
         """
+        if self.root is None:
+            return
+
         def _action():
             self._etat = 'ouvert'
             self.label_etat.config(
-                text=f"✓ ACCÈS AUTORISÉ",
+                text="✓ ACCÈS AUTORISÉ",
                 fg=COULEUR_VOYANT_VERT
             )
             self.label_sous_etat.config(
@@ -307,6 +302,9 @@ class SimulateurPorte:
         Déclenche le flash rouge et met à jour les labels.
         Thread-safe grâce à after().
         """
+        if self.root is None:
+            return
+
         def _action():
             self._etat = 'ferme'
             self.label_etat.config(
@@ -324,8 +322,11 @@ class SimulateurPorte:
     def en_attente(self):
         """
         Remet la porte en état neutre (fermée, voyant orange).
-        Thread-safe grâce à after().
+        Thread-safe grâce à after() — fonctionne avant et après mainloop().
         """
+        if self.root is None:
+            return
+
         def _action():
             self._etat = 'attente'
             self.label_etat.config(
@@ -342,6 +343,8 @@ class SimulateurPorte:
 
     def arreter(self):
         """Ferme proprement la fenetre Tkinter depuis main.py."""
+        if self.root is None:
+            return
         try:
             self.root.after(0, self.root.destroy)
         except tk.TclError:
@@ -349,7 +352,15 @@ class SimulateurPorte:
 
     def lancer(self):
         """
-        Démarre la boucle principale Tkinter (bloquante).
-        À appeler dans un thread séparé depuis main.py.
+        Crée la fenêtre Tkinter ET démarre sa boucle (bloquant).
+        À appeler dans un thread séparé — tk.Tk() doit être créé dans le même
+        thread que mainloop() sous Windows (contrainte COM / apartment threading).
         """
+        self.root = tk.Tk()
+        self.root.title("Porte Sécurisée — Système d'Identification Faciale")
+        self.root.configure(bg=COULEUR_FOND)
+        self.root.resizable(False, False)
+        self.root.geometry(f"{self.largeur_fenetre}x{self.hauteur_fenetre}")
+        self._creer_interface()
+        self.en_attente()
         self.root.mainloop()

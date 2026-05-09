@@ -139,7 +139,11 @@ def extraire_vecteur_depuis_frame(frame):
 
 
 def identifier_vecteur(vecteur, personnes, vecteurs):
-    k = min(7, len(personnes))
+    # k = nb d'enregistrements par personne → vote stable même avec beaucoup de personnes.
+    # On garde k impair pour éviter les égalités parfaites.
+    k = min(NB_ENREGISTREMENTS_PAR_PERSONNE, len(personnes))
+    if k % 2 == 0:
+        k = max(1, k - 1)
     return identifier_knn(vecteur, personnes, vecteurs, seuil=SEUIL_DECISION, k=k)
 
 
@@ -441,11 +445,11 @@ def main():
                 resultat_courant = resultat
                 acces = (distance <= SEUIL_DECISION)
 
-                print(f"  → Identifié  : {nom}")
-                print(f"  → Distance   : {distance:.4f}")
-                print(f"  → Confiance  : {confiance:.1f}%")
-                print(f"  → Décision   : {'ACCÈS AUTORISÉ' if acces else 'ACCÈS REFUSÉ'}")
-                print(f"  → Top 3      : {[(n, f'{d:.3f}') for n, d in top3]}")
+                print(f"  Identifie  : {nom}")
+                print(f"  Distance   : {distance:.4f}")
+                print(f"  Confiance  : {confiance:.1f}%")
+                print(f"  Decision   : {'ACCES AUTORISE' if acces else 'ACCES REFUSE'}")
+                print(f"  Top 3      : {[(n, f'{d:.3f}') for n, d in top3]}")
 
                 # Mettre à jour la simulation de porte
                 if acces:
