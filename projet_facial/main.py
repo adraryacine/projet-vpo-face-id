@@ -44,7 +44,7 @@ SEUIL_DECISION = 0.75
 NOM_FENETRE = "Systeme d'identification faciale"
 NB_FRAMES_SCAN = 5
 MAX_FRAMES_SCAN = 20
-NB_ENREGISTREMENTS_PAR_PERSONNE = 12
+NB_ENREGISTREMENTS_PAR_PERSONNE = 20
 
 
 def afficher_overlay(frame, nom, distance, confiance, top3, acces):
@@ -254,102 +254,80 @@ def mode_enregistrement(cap, personnes, vecteurs):
         print("[ANNULE] Nom vide.")
         return
 
-    print(f"[INFO] Capture de {NB_ENREGISTREMENTS_PAR_PERSONNE} exemples pour '{nom}'.")
-    print("Gardez le visage visible, puis variez legerement angle/expression/lumiere.")
-    input("Appuyez sur ENTREE pour commencer la capture...")
+    print(f"\n[INFO] 20 photos a prendre pour '{nom}'.")
+    print("INSTRUCTIONS :")
+    print("  Photos  1- 5 : restez immobile, expression neutre")
+    print("  Photos  6-10 : changez d'expression (sourire, surprise...)")
+    print("  Photos 11-15 : tournez legerement la tete (+-15 degres)")
+    print("  Photos 16-20 : changez l'eclairage (lampe gauche, droite...)")
+    print("\n  ESPACE = prendre une photo | Q/Esc = annuler")
+    input("Appuyez sur ENTREE pour commencer...")
 
     captures = 0
-    tentatives = 0
-    dernier_temps = 0.0
-    max_tentatives = NB_ENREGISTREMENTS_PAR_PERSONNE * 8
 
-    while captures < NB_ENREGISTREMENTS_PAR_PERSONNE and tentatives < max_tentatives:
+    while captures < NB_ENREGISTREMENTS_PAR_PERSONNE:
         ret, frame = cap.read()
         if not ret:
             continue
 
         frame_affichage = frame.copy()
+
+        if captures < 5:
+            phase = "Phase 1/4 : Expression neutre"
+        elif captures < 10:
+            phase = "Phase 2/4 : Changez d'expression !"
+        elif captures < 15:
+            phase = "Phase 3/4 : Tournez legerement la tete"
+        else:
+            phase = "Phase 4/4 : Changez l'eclairage"
+
         cv2.putText(frame_affichage,
-                    f"Enregistrement {nom}: {captures}/{NB_ENREGISTREMENTS_PAR_PERSONNE}",
+                    f"{nom} : {captures}/{NB_ENREGISTREMENTS_PAR_PERSONNE} photos",
                     (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        cv2.putText(frame_affichage, "Q/Esc annule",
-                    (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 220, 255), 1)
+        cv2.putText(frame_affichage, phase,
+                    (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 200, 0), 1)
+        cv2.putText(frame_affichage, "ESPACE = prendre photo  |  Q/Esc = annuler",
+                    (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 220, 255), 1)
         cv2.imshow(NOM_FENETRE, frame_affichage)
 
         touche = lire_touche(30)
+
         if _est_touche_quitter(touche):
             print("[ANNULE] Capture interrompue.")
             return
 
-        maintenant = time.time()
-        if maintenant - dernier_temps < 0.15:
-            continue
-        dernier_temps = maintenant
-        tentatives += 1
+        if touche == ord(' '):
+            try:
+                vecteur = extraire_vecteur_depuis_frame(frame)
+            except Exception as exc:
+                print(f"[ENREGISTREMENT] Frame ignoree: {exc}")
+                continue
 
-        try:
-            vecteur = extraire_vecteur_depuis_frame(frame)
-        except Exception as exc:
-            print(f"[ENREGISTREMENT] Frame ignoree: {exc}")
-            continue
+            if vecteur is None:
+                print("[ATTENTION] Aucun visage detecte — repositionnez-vous et reessayez.")
+                frame_flash = frame_affichage.copy()
+                cv2.rectangle(frame_flash, (0, 0),
+                              (frame.shape[1], frame.shape[0]), (0, 0, 255), 8)
+                cv2.imshow(NOM_FENETRE, frame_flash)
+                cv2.waitKey(400)
+                continue
 
-        if vecteur is None:
-            continue
+            enregistrer_personne(nom, vecteur)
+            personnes.append(nom)
+            vecteurs.append(vecteur)
+            captures += 1
+            print(f"[OK] Photo {captures}/{NB_ENREGISTREMENTS_PAR_PERSONNE} enregistree.")
 
-        enregistrer_personne(nom, vecteur)
-        personnes.append(nom)
-        vecteurs.append(vecteur)
-        captures += 1
-        print(f"[OK] Exemple {captures}/{NB_ENREGISTREMENTS_PAR_PERSONNE} enregistre.")
+            frame_flash = frame_affichage.copy()
+            cv2.rectangle(frame_flash, (0, 0),
+                          (frame.shape[1], frame.shape[0]), (0, 255, 0), 8)
+            cv2.imshow(NOM_FENETRE, frame_flash)
+            cv2.waitKey(300)
 
     if captures == 0:
-        print("[ERREUR] Aucun visage detecte. Essayez avec plus de lumiere.")
+        print("[ERREUR] Aucune photo enregistree. Essayez avec plus de lumiere.")
     else:
-        print(f"[OK] {captures} exemples ajoutes pour '{nom}'.")
-    return
-
-    """
-    Mode E : capture le visage actuel depuis la webcam,
-    calcule son vecteur 30D, demande le nom en console,
-    puis l'ajoute au fichier dataset.csv.
-
-    Paramètres
-    ----------
-    cap       : objet VideoCapture OpenCV (flux webcam ouvert)
-    personnes : liste des noms (modifiée en place)
-    vecteurs  : liste des vecteurs (modifiée en place)
-    """
-    print("\n[MODE ENREGISTREMENT]")
-    print("Placez le visage devant la webcam. Appuyez sur ENTRÉE pour capturer...")
-    input()   # Pause — l'utilisateur positionne son visage
-
-    ret, frame = cap.read()
-    if not ret:
-        print("[ERREUR] Impossible de lire la webcam.")
-        return
-
-    # Pipeline de détection
-    visage = detecter_et_aligner(frame)
-    if visage is None:
-        print("[ERREUR] Aucun visage détecté. Réessayez.")
-        return
-
-    contour = appliquer_snake(visage)
-    vecteur = calculer_vecteur_30D(visage, contour)
-
-    # Demander le nom de la personne
-    nom = input("Entrez le nom de la personne : ").strip()
-    if not nom:
-        print("[ANNULÉ] Nom vide.")
-        return
-
-    # Sauvegarder dans le CSV
-    enregistrer_personne(nom, vecteur)
-
-    # Mettre à jour les listes en mémoire (sans relire tout le CSV)
-    personnes.append(nom)
-    vecteurs.append(vecteur)
-    print(f"[OK] {nom} enregistré(e) avec succès.")
+        print(f"[OK] {captures} photos enregistrees pour '{nom}'.")
 
 
 def main():
