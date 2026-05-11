@@ -109,17 +109,18 @@ def identifier(vecteur_inconnu, personnes, vecteurs, seuil=0.5):
     meilleur  = personnes[idx_min]
 
     # --- Calcul du score de confiance ---
-    # Formule linéaire : plus la distance est petite, plus la confiance est haute
-    # confiance = 100% si distance = 0
-    # confiance ≈ 0%  si distance ≈ seuil
-    confiance = max(0.0, (1.0 - dist_min / seuil)) * 100.0
+    # Les vecteurs sont normalisés L2 → distance max possible = sqrt(2) ≈ 1.414
+    # On utilise cette borne absolue pour que la confiance soit indépendante du seuil.
+    # dist=0.0 → 100% | dist=0.7 → ~50% | dist=1.414 → 0%
+    DIST_MAX = 1.414
+    confiance = max(0.0, (1.0 - dist_min / DIST_MAX)) * 100.0
 
     # --- Décision binaire : accepter ou refuser ---
     if dist_min <= seuil:
         nom_final = meilleur
     else:
         nom_final = "Inconnu"
-        confiance = 0.0   # Un inconnu a une confiance de 0%
+        confiance = 0.0
 
     return nom_final, dist_min, confiance, top3
 
@@ -204,8 +205,6 @@ def identifier_knn(vecteur_inconnu, personnes, vecteurs, seuil=0.5, k=5):
     dist_min = float(distances[indices_topk[0]])
 
     # Test de marge : rejeter si une autre personne est trop proche du gagnant.
-    # Avec beaucoup de personnes, les clusters se rapprochent — une marge de 15%
-    # évite les identifications ambiguës (exemple : Alice=0.28, Bob=0.30 → Inconnu).
     dist_min_par_personne = {}
     for i, nom in enumerate(personnes):
         d = float(distances[i])
@@ -215,10 +214,11 @@ def identifier_knn(vecteur_inconnu, personnes, vecteurs, seuil=0.5, k=5):
     dist_gagnant = dist_min_par_personne.get(nom_gagnant, dist_min)
     autres_dists = [d for n, d in dist_min_par_personne.items() if n != nom_gagnant]
 
-    if autres_dists and min(autres_dists) < dist_gagnant * 1.15:
+    if autres_dists and min(autres_dists) < dist_gagnant * 1.30:
         return "Inconnu", dist_min, 0.0, top3
 
-    confiance = max(0.0, (1.0 - dist_min / seuil)) * 100.0
+    DIST_MAX = 1.414
+    confiance = max(0.0, (1.0 - dist_min / DIST_MAX)) * 100.0
     return nom_gagnant, dist_min, confiance, top3
 
 

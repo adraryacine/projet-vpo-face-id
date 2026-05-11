@@ -389,7 +389,7 @@ def main():
         # Si un résultat d'identification est disponible, afficher l'overlay
         if resultat_courant is not None:
             nom, distance, confiance, top3 = resultat_courant
-            acces = (distance <= SEUIL_DECISION)
+            acces = (nom != "Inconnu") and (distance <= SEUIL_DECISION)
             frame_affichage = afficher_overlay(
                 frame_affichage, nom, distance, confiance, top3, acces
             )
@@ -421,7 +421,7 @@ def main():
             else:
                 nom, distance, confiance, top3 = resultat
                 resultat_courant = resultat
-                acces = (distance <= SEUIL_DECISION)
+                acces = (nom != "Inconnu") and (distance <= SEUIL_DECISION)
 
                 print(f"  Identifie  : {nom}")
                 print(f"  Distance   : {distance:.4f}")
